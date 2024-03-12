@@ -101,7 +101,7 @@ public class RandomData implements Iterable<Object> {
       @Override
       public Object next() {
         n++;
-        return generate(root, random, 0);
+        return generate(root, null, random, 0);
       }
 
       @Override
@@ -111,64 +111,125 @@ public class RandomData implements Iterable<Object> {
     };
   }
 
-  @SuppressWarnings(value = "unchecked")
-  private Object generate(Schema schema, Random random, int d) {
+  private Object generate(Schema schema, Schema.Field field, Random random, int d) {
     switch (schema.getType()) {
     case RECORD:
-      Object record = genericData.newRecord(null, schema);
-      for (Schema.Field field : schema.getFields()) {
-        Object value = (field.getObjectProp(USE_DEFAULT) == null) ? generate(field.schema(), random, d + 1)
-            : GenericData.get().getDefaultValue(field);
-        genericData.setField(record, field.name(), field.pos(), value);
-      }
-      return record;
+      return generateRecord(schema, field, random, d);
     case ENUM:
-      List<String> symbols = schema.getEnumSymbols();
-      return genericData.createEnum(symbols.get(random.nextInt(symbols.size())), schema);
+      return generateEnum(schema, field, random, d);
     case ARRAY:
-      int length = Math.max(0, (random.nextInt(5) + 2) - d);
-      GenericArray<Object> array = (GenericArray<Object>) genericData.newArray(null, length, schema);
-      for (int i = 0; i < length; i++)
-        array.add(generate(schema.getElementType(), random, d + 1));
-      return array;
+      return generateArray(schema, field, random, d);
     case MAP:
-      length = Math.max(0, (random.nextInt(5) + 2) - d);
-      Map<Object, Object> map = (Map<Object, Object>) genericData.newMap(null, length);
-      for (int i = 0; i < length; i++) {
-        map.put(randomString(random, 40), generate(schema.getValueType(), random, d + 1));
-      }
-      return map;
+      return generateMap(schema, field, random, d);
     case UNION:
-      List<Schema> types = schema.getTypes();
-      return generate(types.get(random.nextInt(types.size())), random, d);
+      return generateUnion(schema, field, random, d);
     case FIXED:
-      byte[] bytes = new byte[schema.getFixedSize()];
-      random.nextBytes(bytes);
-      return genericData.createFixed(null, bytes, schema);
+      return generateFixed(schema, field, random, d);
     case STRING:
-      return randomString(random, 40);
+      return generateString(schema, field, random, d);
     case BYTES:
-      return randomBytes(random, 40);
+      return generateBytes(schema, field, random, d);
     case INT:
-      return this.randomInt(random, schema.getLogicalType());
+      return generateInt(schema, field, random, d);
     case LONG:
-      return this.randomLong(random, schema.getLogicalType());
+      return generateLong(schema, field, random, d);
     case FLOAT:
-      return random.nextFloat();
+      return generateFloat(schema, field, random, d);
     case DOUBLE:
-      return random.nextDouble();
+      return generateDouble(schema, field, random, d);
     case BOOLEAN:
-      return random.nextBoolean();
+      return generateBoolean(schema, field, random, d);
     case NULL:
-      return null;
+      return generateNull(schema, field, random, d);
     default:
       throw new RuntimeException("Unknown type: " + schema);
     }
   }
 
+  protected Object generateRecord(Schema schema, Schema.Field field, Random random, int d) {
+    Object record = genericData.newRecord(null, schema);
+    for (Schema.Field f : schema.getFields()) {
+      Object value = (f.getObjectProp(USE_DEFAULT) == null) ? generate(f.schema(), f, random, d + 1)
+          : GenericData.get().getDefaultValue(f);
+      genericData.setField(record, f.name(), f.pos(), value);
+    }
+    return record;
+  }
+
+  protected Object generateEnum(Schema schema, Schema.Field field, Random random, int d) {
+    List<String> symbols = schema.getEnumSymbols();
+    return genericData.createEnum(symbols.get(random.nextInt(symbols.size())), schema);
+  }
+
+  @SuppressWarnings("unchecked")
+  protected Object generateArray(Schema schema, Schema.Field field, Random random, int d) {
+    int length = Math.max(0, (random.nextInt(5) + 2) - d);
+    GenericArray<Object> array = (GenericArray<Object>) genericData.newArray(null, length, schema);
+    for (int i = 0; i < length; i++)
+      array.add(generate(schema.getElementType(), null, random, d + 1));
+    return array;
+  }
+
+  @SuppressWarnings("unchecked")
+  protected Object generateMap(Schema schema, Schema.Field field, Random random, int d) {
+    int length = Math.max(0, (random.nextInt(5) + 2) - d);
+    Map<Object, Object> map = (Map<Object, Object>) genericData.newMap(null, length);
+    for (int i = 0; i < length; i++) {
+      map.put(randomString(random, 40), generate(schema.getValueType(), null, random, d + 1));
+    }
+    return map;
+  }
+
+  @SuppressWarnings("unchecked")
+  protected Object generateUnion(Schema schema, Schema.Field field, Random random, int d) {
+    List<Schema> types = schema.getTypes();
+    Map<Object, Object> map = (Map<Object, Object>) genericData.newMap(null, 1);
+    Schema type = types.get(random.nextInt(types.size()));
+    map.put(type.getName(), generate(type, null, random, d));
+    return map;
+  }
+
+  protected Object generateFixed(Schema schema, Schema.Field field, Random random, int d) {
+    byte[] bytes = new byte[schema.getFixedSize()];
+    random.nextBytes(bytes);
+    return genericData.createFixed(null, bytes, schema);
+  }
+
+  protected Object generateString(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return randomString(random, 40);
+  }
+
+  protected Object generateBytes(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return randomBytes(random, 40);
+  }
+
+  protected Object generateInt(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return this.randomInt(random, schema.getLogicalType());
+  }
+
+  protected Object generateLong(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return this.randomLong(random, schema.getLogicalType());
+  }
+
+  protected Object generateFloat(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return random.nextFloat();
+  }
+
+  protected Object generateDouble(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return random.nextDouble();
+  }
+
+  protected Object generateBoolean(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return random.nextBoolean();
+  }
+
+  protected Object generateNull(Schema schema, Schema.Field schemaField, Random random, int d) {
+    return null;
+  }
+
   private static final Charset UTF8 = StandardCharsets.UTF_8;
 
-  private int randomInt(Random random, LogicalType type) {
+  protected int randomInt(Random random, LogicalType type) {
     if (type instanceof LogicalTypes.TimeMillis) {
       return random.nextInt(RandomData.MILLIS_IN_DAY - 1);
     }
@@ -176,7 +237,7 @@ public class RandomData implements Iterable<Object> {
     return random.nextInt();
   }
 
-  private long randomLong(Random random, LogicalType type) {
+  protected long randomLong(Random random, LogicalType type) {
     if (type instanceof LogicalTypes.TimeMicros) {
       return ThreadLocalRandom.current().nextLong(RandomData.MILLIS_IN_DAY * 1000L);
     }
@@ -185,7 +246,7 @@ public class RandomData implements Iterable<Object> {
     return random.nextLong();
   }
 
-  private Object randomString(Random random, int maxLength) {
+  protected Object randomString(Random random, int maxLength) {
     int length = random.nextInt(maxLength);
     byte[] bytes = new byte[length];
     for (int i = 0; i < length; i++) {
@@ -194,7 +255,7 @@ public class RandomData implements Iterable<Object> {
     return utf8ForString ? new Utf8(bytes) : new String(bytes, UTF8);
   }
 
-  private static ByteBuffer randomBytes(Random rand, int maxLength) {
+  protected static ByteBuffer randomBytes(Random rand, int maxLength) {
     ByteBuffer bytes = ByteBuffer.allocate(rand.nextInt(maxLength));
     bytes.limit(bytes.capacity());
     rand.nextBytes(bytes.array());
